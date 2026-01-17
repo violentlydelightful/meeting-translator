@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Translator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Meeting Translator</h1>
+            <p class="tagline">What they said → What they meant</p>
+        </header>
+
+        <main>
+            <div class="translator-box">
+                <div class="input-section">
+                    <label for="input-text">Paste corporate speak here:</label>
+                    <textarea id="input-text" placeholder="Let's circle back on this after we align on the strategic synergies. I don't have the bandwidth for a deep dive right now, but that's a great question..."></textarea>
+                    <button id="translate-btn" onclick="translate()">Translate</button>
+                </div>
+
+                <div id="results" class="results-section" style="display: none;">
+                    <div class="density-meter">
+                        <div class="density-label">Corporate BS Density</div>
+                        <div class="density-bar">
+                            <div class="density-fill" id="density-fill"></div>
+                        </div>
+                        <div class="density-percent" id="density-percent">0%</div>
+                    </div>
+
+                    <div class="translations" id="translations"></div>
+                </div>
+            </div>
+
+            <section class="examples">
+                <h2>Try These</h2>
+                <div class="example-chips">
+                    <button class="chip" onclick="setExample(this)">Let's circle back on this</button>
+                    <button class="chip" onclick="setExample(this)">Per my last email</button>
+                    <button class="chip" onclick="setExample(this)">That's a great question</button>
+                    <button class="chip" onclick="setExample(this)">I don't have the bandwidth</button>
+                    <button class="chip" onclick="setExample(this)">Let's take this offline</button>
+                    <button class="chip" onclick="setExample(this)">With all due respect</button>
+                </div>
+            </section>
+
+            <section class="dictionary">
+                <h2>The Corporate Dictionary</h2>
+                <div class="dictionary-grid" id="dictionary-grid"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>A public service for survivors of corporate meetings everywhere.</p>
+        </footer>
+    </div>
+
+    <script>
+        async function translate() {
+            const text = document.getElementById('input-text').value;
+            if (!text.trim()) return;
+
+            const btn = document.getElementById('translate-btn');
+            btn.textContent = 'Translating...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+
+                const data = await response.json();
+                showResults(data);
+            } catch (error) {
+                alert('Translation failed: ' + error.message);
+            }
+
+            btn.textContent = 'Translate';
+            btn.disabled = false;
+        }
+
+        function showResults(data) {
+            const resultsSection = document.getElementById('results');
+            const translationsDiv = document.getElementById('translations');
+            const densityFill = document.getElementById('density-fill');
+            const densityPercent = document.getElementById('density-percent');
+
+            // Update density meter
+            densityFill.style.width = data.summary.corporate_density + '%';
+            densityPercent.textContent = data.summary.corporate_density + '%';
+
+            // Color based on density
+            if (data.summary.corporate_density > 70) {
+                densityFill.style.background = '#e53e3e';
+            } else if (data.summary.corporate_density > 40) {
+                densityFill.style.background = '#ed8936';
+            } else {
+                densityFill.style.background = '#48bb78';
+            }
+
+            // Show translations
+            translationsDiv.innerHTML = '';
+            data.results.forEach(result => {
+                const item = document.createElement('div');
+                item.className = 'translation-item' + (result.translated ? ' has-translation' : '');
+
+                if (result.translated) {
+                    item.innerHTML = `
+                        <div class="original">
+                            <span class="label">They said:</span>
+                            <p>"${result.original}"</p>
+                            <span class="matched">Matched: "${result.matched_phrase}"</span>
+                        </div>
+                        <div class="arrow">→</div>
+                        <div class="meaning">
+                            <span class="label">They meant:</span>
+                            <p>"${result.translated}"</p>
+                            <span class="confidence">${result.confidence}% confidence</span>
+                        </div>
+                    `;
+                } else {
+                    item.innerHTML = `
+                        <div class="original no-match">
+                            <p>"${result.original}"</p>
+                            <span class="no-match-label">No corporate speak detected (refreshingly honest)</span>
+                        </div>
+                    `;
+                }
+
+                translationsDiv.appendChild(item);
+            });
+
+            resultsSection.style.display = 'block';
+        }
+
+        function setExample(btn) {
+            document.getElementById('input-text').value = btn.textContent;
+            translate();
+        }
+
+        // Load dictionary
+        async function loadDictionary() {
+            try {
+                const response = await fetch('/phrases');
+                const data = await response.json();
+
+                const grid = document.getElementById('dictionary-grid');
+                // Show random selection
+                const shuffled = data.phrases.sort(() => 0.5 - Math.random()).slice(0, 12);
+
+                shuffled.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'dict-card';
+                    card.innerHTML = `
+                        <div class="dict-phrase">"${item.phrase}"</div>
+                        <div class="dict-meaning">${item.translations[0]}</div>
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Failed to load dictionary:', error);
+            }
+        }
+
+        // Enter key to translate
+        document.getElementById('input-text').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.metaKey) {
+                translate();
+            }
+        });
+
+        loadDictionary();
+    </script>
+</body>
+</html>
